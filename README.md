@@ -178,16 +178,20 @@ CSV file with columns: `username`, `email`, `source`, `repo`, `commit_sha`, `col
    - Public email field
    - Bio text
    - Blog/homepage URL
-   
+
 3. **Repository Scanning**: For each user, scans their repositories:
+
    - Reads README.md files for contact information
    - Checks repository homepage URLs
    - Examines commit history for author/committer emails
+
 4. **Email Processing**:
+
    - Normalizes email addresses (lowercase, trim whitespace)
    - Validates email format
    - Filters out GitHub noreply addresses
    - Deduplicates emails
+   
 5. **Output Generation**: Writes results to TXT, JSON, and CSV formats
 
 ## Limitations and Caveats
