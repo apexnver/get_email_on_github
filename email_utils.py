@@ -3,7 +3,7 @@ Email extraction and validation utilities.
 """
 
 import re
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Any
 from github_client import GitHubClient
 
 
@@ -121,22 +121,29 @@ class EmailExtractor:
         """
         self.client = client
     
-    def extract_emails_from_user(self, username: str) -> List[Dict[str, str]]:
+    def extract_emails_from_user(self, username: str) -> Dict[str, Any]:
         """
-        Extract all emails for a user from various sources.
+        Extract all emails and user info from various sources.
         
         Args:
             username: GitHub username
             
         Returns:
-            List of email data dictionaries with keys: email, source, repo, commit_sha
+            Dictionary with keys: emails (list), name, location, user_data
         """
         results = []
         seen_emails: Set[str] = set()
+        user_name = None
+        user_location = None
         
         # 1. Extract from user profile
         user_data = self.client.get_user(username)
         if user_data:
+            # Extract user name
+            user_name = user_data.get("name") or user_data.get("login")
+            
+            # Extract location
+            user_location = user_data.get("location", "")
             # Email field (if public)
             if user_data.get("email") and is_valid_email(user_data["email"]):
                 email = normalize_email(user_data["email"])
@@ -256,5 +263,10 @@ class EmailExtractor:
             if len(results) >= 5:
                 break
         
-        return results
+        return {
+            "emails": results,
+            "name": user_name or username,
+            "location": user_location or "",
+            "user_data": user_data or {}
+        }
 

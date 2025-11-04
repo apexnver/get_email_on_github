@@ -246,9 +246,12 @@ def main():
             print(f"[{idx}/{len(users)}] Processing user: {username}")
             
             try:
-                emails = extractor.extract_emails_from_user(username)
+                user_info = extractor.extract_emails_from_user(username)
+                user_name = user_info.get("name", username)
+                user_location = user_info.get("location", args.location or "")
+                emails_list = user_info.get("emails", [])
                 
-                for email_data in emails:
+                for email_data in emails_list:
                     email = email_data.get("email")
                     if email:
                         # Create unique key: (username, email) to avoid duplicates
@@ -263,9 +266,12 @@ def main():
                                 seen_emails.add(email.lower())
                             
                             email_data["username"] = username
+                            email_data["name"] = user_name
+                            email_data["location"] = user_location
+                            email_data["category"] = user_location or "Unknown"
                             email_data["collected_at"] = datetime.utcnow().isoformat() + "Z"
                             all_results.append(email_data)
-                            print(f"  ✓ Found email: {email} (source: {email_data.get('source')})")
+                            print(f"  ✓ Found email: {email} (name: {user_name}, source: {email_data.get('source')})")
                         # else: silently skip duplicate (username, email) pairs
                 
             except Exception as e:
@@ -279,9 +285,11 @@ def main():
         # Write output files
         if not args.dry_run:
             print(f"\nWriting output files...")
-            writer.write_txt(all_results)
-            writer.write_json(all_results)
-            writer.write_csv(all_results)
+            finding_date = datetime.utcnow().strftime("%Y-%m-%d")
+            writer.write_txt(all_results, finding_date)
+            writer.write_json(all_results, finding_date)
+            writer.write_csv(all_results, finding_date)
+            writer.write_by_category(all_results, finding_date)
             print(f"✓ Output files written to {output_dir}")
         else:
             print(f"\n[Dry run] Would write {len(all_results)} email entries")
