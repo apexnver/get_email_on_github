@@ -173,10 +173,12 @@ CSV file with columns: `username`, `email`, `source`, `repo`, `commit_sha`, `col
 ## How It Works
 
 1. **User Search**: Uses GitHub's Search API to find users matching your criteria
+
 2. **Profile Extraction**: Fetches user profile data and extracts emails from:
    - Public email field
    - Bio text
    - Blog/homepage URL
+   
 3. **Repository Scanning**: For each user, scans their repositories:
    - Reads README.md files for contact information
    - Checks repository homepage URLs
