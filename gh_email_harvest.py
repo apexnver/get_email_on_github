@@ -60,6 +60,18 @@ Note: This tool only collects publicly visible emails. Many users hide their ema
     )
     
     parser.add_argument(
+        "--created",
+        type=str,
+        help="Filter by account creation date (e.g., '>=2020-01-01', '>2023-01-01', '<2024-01-01')"
+    )
+    
+    parser.add_argument(
+        "--repo",
+        type=str,
+        help="Filter by repository count (e.g., '>5', '>=10', '<20')"
+    )
+    
+    parser.add_argument(
         "--max-results",
         type=int,
         default=100,
@@ -112,13 +124,25 @@ def build_search_query(args: argparse.Namespace) -> str:
     
     if args.languages:
         langs = [lang.strip() for lang in args.languages.split(",")]
-        lang_query = " OR ".join([f'language:{lang}' for lang in langs])
-        query_parts.append(f"({lang_query})")
+        # GitHub search: use language filter without parentheses for better compatibility
+        if len(langs) == 1:
+            # Single language - use directly
+            query_parts.append(f"language:{langs[0]}")
+        else:
+            # Multiple languages - use OR with parentheses
+            lang_query = " OR ".join([f'language:{lang}' for lang in langs])
+            query_parts.append(f"({lang_query})")
     
     if args.min_followers > 0:
         query_parts.append(f"followers:>={args.min_followers}")
     
-    # Search for users with email in bio
+    if args.created:
+        query_parts.append(f"created:{args.created}")
+    
+    if args.repo:
+        query_parts.append(f"repos:{args.repo}")
+    
+    # Search for users
     query_parts.append("type:user")
     
     return " ".join(query_parts) if query_parts else "type:user"
@@ -173,13 +197,50 @@ def main():
     # Collect emails
     all_results = []
     seen_emails: Set[str] = set()
+    seen_username_email_pairs: Set[tuple] = set()  # Track (username, email) pairs to avoid duplicates
     
     try:
         # Search for users
-        search_query = build_search_query(args)
-        users = client.search_users(search_query, max_results=args.max_results)
-        
-        print(f"Found {len(users)} users to process\n")
+        # If multiple languages, search each separately and combine results
+        if args.languages:
+            langs = [lang.strip() for lang in args.languages.split(",")]
+            if len(langs) > 1:
+                # Multiple languages: search each separately and combine
+                all_users = set()
+                for lang in langs:
+                    # Create a temporary args object for this language
+                    temp_args = argparse.Namespace(
+                        location=args.location,
+                        languages=lang,
+                        min_followers=args.min_followers,
+                        created=args.created,
+                        repo=args.repo,
+                        max_results=args.max_results,
+                        token=args.token,
+                        output=args.output,
+                        dry_run=args.dry_run,
+                        rate=args.rate,
+                        concurrency=args.concurrency
+                    )
+                    search_query = build_search_query(temp_args)
+                    lang_users = client.search_users(search_query, max_results=args.max_results)
+                    all_users.update(lang_users)
+                    # Rate limiting between language searches
+                    if len(langs) > 1:
+                        time.sleep(1.0)
+                
+                users = list(all_users)[:args.max_results]
+                print(f"Found {len(users)} users (combined from {len(langs)} language searches)\n")
+            else:
+                # Single language - use normal search
+                search_query = build_search_query(args)
+                users = client.search_users(search_query, max_results=args.max_results)
+                print(f"Found {len(users)} users to process\n")
+        else:
+            # No languages specified
+            search_query = build_search_query(args)
+            users = client.search_users(search_query, max_results=args.max_results)
+            print(f"Found {len(users)} users to process\n")
         
         for idx, username in enumerate(users, 1):
             print(f"[{idx}/{len(users)}] Processing user: {username}")
@@ -189,12 +250,23 @@ def main():
                 
                 for email_data in emails:
                     email = email_data.get("email")
-                    if email and email not in seen_emails:
-                        seen_emails.add(email)
-                        email_data["username"] = username
-                        email_data["collected_at"] = datetime.utcnow().isoformat() + "Z"
-                        all_results.append(email_data)
-                        print(f"  ✓ Found email: {email} (source: {email_data.get('source')})")
+                    if email:
+                        # Create unique key: (username, email) to avoid duplicates
+                        username_email_key = (username.lower(), email.lower())
+                        
+                        # Only add if this (username, email) combination hasn't been seen
+                        if username_email_key not in seen_username_email_pairs:
+                            seen_username_email_pairs.add(username_email_key)
+                            
+                            # Also track email separately for statistics
+                            if email.lower() not in seen_emails:
+                                seen_emails.add(email.lower())
+                            
+                            email_data["username"] = username
+                            email_data["collected_at"] = datetime.utcnow().isoformat() + "Z"
+                            all_results.append(email_data)
+                            print(f"  ✓ Found email: {email} (source: {email_data.get('source')})")
+                        # else: silently skip duplicate (username, email) pairs
                 
             except Exception as e:
                 print(f"  ✗ Error processing {username}: {e}")

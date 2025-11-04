@@ -171,14 +171,19 @@ class EmailExtractor:
                             "source": "homepage"
                         })
         
-        # 2. Extract from repositories
-        repos = self.client.get_user_repos(username, max_repos=50)
+        # 2. Extract from repositories (optimized: reduced repos and commits)
+        repos = self.client.get_user_repos(username, max_repos=10)  # Reduced from 50 to 10
         
         for repo in repos:
             repo_name = repo.get("name", "")
             repo_owner = repo.get("owner", {}).get("login", username)
             
-            # Homepage field
+            # Only process repositories owned by the target user
+            # (skip forks or repos where user is just a collaborator)
+            if repo_owner.lower() != username.lower():
+                continue
+            
+            # Homepage field (quick check)
             homepage = repo.get("homepage", "")
             if homepage:
                 emails = extract_emails_from_text(homepage)
@@ -191,52 +196,65 @@ class EmailExtractor:
                             "repo": f"{repo_owner}/{repo_name}"
                         })
             
-            # README content
-            readme_content = self.client.get_repo_content(repo_owner, repo_name, "README.md")
-            if readme_content:
-                emails = extract_emails_from_text(readme_content)
-                for email in emails:
-                    if email not in seen_emails:
-                        seen_emails.add(email)
-                        results.append({
-                            "email": email,
-                            "source": "readme",
-                            "repo": f"{repo_owner}/{repo_name}"
-                        })
+            # README content - skip entirely to avoid extracting other contributors' emails
+            # Most users have their email in profile or commits, which are more reliable
+            # readme_content = self.client.get_repo_content(repo_owner, repo_name, "README.md")
+            # Skipped to avoid extracting emails from other contributors mentioned in README
             
-            # Commits
-            commits = self.client.get_repo_commits(repo_owner, repo_name, max_commits=30)
+            # Commits - use author filter to only fetch commits by the target user
+            # This significantly reduces API calls and processing time
+            commits = self.client.get_repo_commits(repo_owner, repo_name, max_commits=10, author=username)  # Reduced from 30 to 10
             
             for commit in commits:
                 commit_data = commit.get("commit", {})
                 author = commit_data.get("author", {})
                 committer = commit_data.get("committer", {})
                 
-                # Author email
-                author_email = author.get("email", "")
-                if author_email and is_valid_email(author_email):
-                    email = normalize_email(author_email)
-                    if email and email not in seen_emails:
-                        seen_emails.add(email)
-                        results.append({
-                            "email": email,
-                            "source": "commit",
-                            "repo": f"{repo_owner}/{repo_name}",
-                            "commit_sha": commit.get("sha", "")[:8]
-                        })
+                # Since we filtered by author, we can trust these commits are from the target user
+                # But double-check to be safe
+                commit_author = commit.get("author")
+                commit_committer = commit.get("committer")
                 
-                # Committer email
-                committer_email = committer.get("email", "")
-                if committer_email and is_valid_email(committer_email):
-                    email = normalize_email(committer_email)
-                    if email and email not in seen_emails:
-                        seen_emails.add(email)
-                        results.append({
-                            "email": email,
-                            "source": "commit",
-                            "repo": f"{repo_owner}/{repo_name}",
-                            "commit_sha": commit.get("sha", "")[:8]
-                        })
+                author_login = commit_author.get("login") if commit_author and isinstance(commit_author, dict) else None
+                committer_login = commit_committer.get("login") if commit_committer and isinstance(commit_committer, dict) else None
+                
+                # Author email - verify it's the target user
+                if author_login and isinstance(author_login, str) and author_login.lower() == username.lower():
+                    author_email = author.get("email", "")
+                    if author_email and is_valid_email(author_email):
+                        email = normalize_email(author_email)
+                        if email and email not in seen_emails:
+                            seen_emails.add(email)
+                            results.append({
+                                "email": email,
+                                "source": "commit",
+                                "repo": f"{repo_owner}/{repo_name}",
+                                "commit_sha": commit.get("sha", "")[:8]
+                            })
+                            # Early exit if we found a valid email from commit
+                            if len(results) >= 5:  # Stop after finding 5 emails per user
+                                break
+                
+                # Committer email - verify it's the target user
+                if committer_login and isinstance(committer_login, str) and committer_login.lower() == username.lower():
+                    committer_email = committer.get("email", "")
+                    if committer_email and is_valid_email(committer_email):
+                        email = normalize_email(committer_email)
+                        if email and email not in seen_emails:
+                            seen_emails.add(email)
+                            results.append({
+                                "email": email,
+                                "source": "commit",
+                                "repo": f"{repo_owner}/{repo_name}",
+                                "commit_sha": commit.get("sha", "")[:8]
+                            })
+                            # Early exit if we found a valid email from commit
+                            if len(results) >= 5:  # Stop after finding 5 emails per user
+                                break
+            
+            # Early exit if we've found enough emails for this user
+            if len(results) >= 5:
+                break
         
         return results
 

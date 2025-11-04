@@ -122,7 +122,18 @@ class GitHubClient:
             endpoint = f"/search/users?q={encoded_query}&page={page}&per_page={per_page}"
             data = self._make_request("GET", endpoint)
             
-            if not data or "items" not in data:
+            if not data:
+                # If data is None, the request failed - break to avoid infinite loop
+                print(f"  ⚠ No data returned from GitHub API for query: {query}")
+                break
+            
+            # Check for API errors
+            if "items" not in data:
+                # Check if there's an error message
+                if "message" in data:
+                    print(f"  ⚠ GitHub API error: {data.get('message')}")
+                else:
+                    print(f"  ⚠ Unexpected API response format (no 'items' key)")
                 break
             
             items = data.get("items", [])
@@ -130,7 +141,9 @@ class GitHubClient:
                 break
             
             for item in items:
-                users.append(item.get("login"))
+                login = item.get("login")
+                if login:
+                    users.append(login)
                 if len(users) >= max_results:
                     break
             
@@ -188,7 +201,7 @@ class GitHubClient:
         
         return repos[:max_repos]
     
-    def get_repo_commits(self, owner: str, repo: str, max_commits: int = 100) -> List[Dict[str, Any]]:
+    def get_repo_commits(self, owner: str, repo: str, max_commits: int = 100, author: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get repository commits.
         
@@ -196,6 +209,7 @@ class GitHubClient:
             owner: Repository owner
             repo: Repository name
             max_commits: Maximum number of commits to fetch
+            author: Filter commits by author username (optional)
             
         Returns:
             List of commit data
@@ -206,6 +220,8 @@ class GitHubClient:
         
         while len(commits) < max_commits:
             endpoint = f"/repos/{owner}/{repo}/commits?page={page}&per_page={per_page}"
+            if author:
+                endpoint += f"&author={author}"
             data = self._make_request("GET", endpoint)
             
             if not data:

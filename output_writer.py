@@ -30,11 +30,16 @@ class OutputWriter:
         """
         output_file = self.output_dir / "emails.txt"
         
+        # Deduplicate by email (case-insensitive)
+        seen_emails = set()
         with open(output_file, "w", encoding="utf-8") as f:
             for result in results:
                 email = result.get("email", "")
                 if email:
-                    f.write(f"{email}\n")
+                    email_lower = email.lower()
+                    if email_lower not in seen_emails:
+                        seen_emails.add(email_lower)
+                        f.write(f"{email}\n")
     
     def write_json(self, results: List[Dict]) -> None:
         """
@@ -45,8 +50,19 @@ class OutputWriter:
         """
         output_file = self.output_dir / "emails.json"
         
+        # Deduplicate by (username, email) pairs (case-insensitive)
+        seen_pairs = set()
+        unique_results = []
+        for result in results:
+            username = result.get("username", "").lower()
+            email = result.get("email", "").lower()
+            pair_key = (username, email)
+            if pair_key not in seen_pairs:
+                seen_pairs.add(pair_key)
+                unique_results.append(result)
+        
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(unique_results, f, indent=2, ensure_ascii=False)
     
     def write_csv(self, results: List[Dict]) -> None:
         """
@@ -66,13 +82,24 @@ class OutputWriter:
                 writer.writeheader()
             return
         
+        # Deduplicate by (username, email) pairs (case-insensitive)
+        seen_pairs = set()
+        unique_results = []
+        for result in results:
+            username = result.get("username", "").lower()
+            email = result.get("email", "").lower()
+            pair_key = (username, email)
+            if pair_key not in seen_pairs:
+                seen_pairs.add(pair_key)
+                unique_results.append(result)
+        
         with open(output_file, "w", newline="", encoding="utf-8") as f:
             fieldnames = ["username", "email", "source", "repo", "commit_sha", "collected_at"]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             
             writer.writeheader()
             
-            for result in results:
+            for result in unique_results:
                 row = {
                     "username": result.get("username", ""),
                     "email": result.get("email", ""),
