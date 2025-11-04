@@ -211,7 +211,9 @@ CSV file with columns: `username`, `email`, `source`, `repo`, `commit_sha`, `col
 - The tool implements exponential backoff and respects rate limit headers
 
 ### Privacy Considerations
+
 - This tool only accesses **publicly available** information
+
 - It does not attempt to bypass privacy settings
 - Users who have hidden their emails will not appear in results
 
