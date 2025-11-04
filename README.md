@@ -191,17 +191,20 @@ CSV file with columns: `username`, `email`, `source`, `repo`, `commit_sha`, `col
    - Validates email format
    - Filters out GitHub noreply addresses
    - Deduplicates emails
-   
+
 5. **Output Generation**: Writes results to TXT, JSON, and CSV formats
 
 ## Limitations and Caveats
 
 ### Email Availability
+
 - **Many users hide their email addresses** - GitHub allows users to hide their email from public view. This tool only collects what is publicly visible.
 - **Commit emails may be noreply** - Many users use GitHub's noreply email addresses (`username@users.noreply.github.com`) in commits. These are automatically filtered out.
+
 - **Email may not be current** - Some emails found in commits or README files may be outdated.
 
 ### API Rate Limits
+
 - **Unauthenticated requests**: 60 requests/hour
 - **Authenticated requests**: 5,000 requests/hour
 - **Secondary rate limits**: GitHub may apply additional limits for aggressive API usage
