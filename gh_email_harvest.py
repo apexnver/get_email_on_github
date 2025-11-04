@@ -289,7 +289,6 @@ def main():
             writer.write_txt(all_results, finding_date)
             writer.write_json(all_results, finding_date)
             writer.write_csv(all_results, finding_date)
-            writer.write_by_category(all_results, finding_date)
             print(f"✓ Output files written to {output_dir}")
         else:
             print(f"\n[Dry run] Would write {len(all_results)} email entries")
